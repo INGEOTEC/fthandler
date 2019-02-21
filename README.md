@@ -1,0 +1,2 @@
+# fthandler
+FastText handler
