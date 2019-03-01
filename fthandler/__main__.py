@@ -16,6 +16,29 @@ text_key = os.environ.get('text', 'text')
 
 
 def predict_test(X, y, Xtest, params, le):
+    """
+    Predicts and prints to stdout the prediction of ::params::Xtest using a fastText model created with `X`, `y`,
+    and `params` (fastText's hyper-parameters). 
+
+    Parameters
+    ----------
+    - X: an array of dictionaries, each one with a "text" keyword to access the actual textual data
+       Examples for training
+    - y: an array of labels (integers or strings)
+       Labels associated to `X`
+    - Xtest: idem to `X`
+       Dataset to be predicted
+    - params: dict
+       Hyper-parameters for the fastText model
+    - le: LabelEncoder
+       A label encoder to map predicted labels to the original naming
+
+    Returns
+    -------
+    Nothing. This procedure prints in JSON format the predicted labels to the stdout (updating input dictionaries with a "klass" keyword);
+    one prediction per line (one valid JSON per line)
+    
+    """
     ft = FastTextHandler(**params).fit(X, y)
     hy = le.inverse_transform(ft.predict(Xtest))
 

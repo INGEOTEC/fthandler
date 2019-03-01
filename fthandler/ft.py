@@ -10,9 +10,13 @@ from tempfile import mktemp
 from sklearn.metrics import recall_score, f1_score
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import StratifiedKFold
+import pickle
 
 
 class ConfigSpace(object):
+    """
+    Defines the configuration space of fastText
+    """
     def __init__(self):
         self.mask_users = [True, False]
         self.mask_urls = [True, False]
@@ -28,6 +32,9 @@ class ConfigSpace(object):
         self.maxn = [3, 5, 7]
 
     def param_neighbors(self, field, value):
+        """
+        Defines perturbations for each parameter
+        """
         if field.startswith('mask'):
             return [not value]
 
@@ -53,6 +60,9 @@ class ConfigSpace(object):
         return l
 
     def random_config(self):
+        """
+        Returns a random configuration for fastText
+        """
         c = {}
         for field, values in self.__dict__.items():
             if field[0] == '_':
@@ -63,6 +73,20 @@ class ConfigSpace(object):
         return c
 
     def neighborhood(self, config):
+        """
+        Computes the neighborhood of the given configuration (based on `param_neighbors`)
+        
+        Parameters
+        ----------
+        
+        config: dict
+           A valid configuration for FastTextHandler
+
+        Returns
+        -------
+        It returns an iterator of configurations pretty similar to input `config`
+          
+        """
         for field, values in self.__dict__.items():
             if field[0] == '_':
                 continue
@@ -77,6 +101,21 @@ class ConfigSpace(object):
 
 
 def config_id(c):
+    """
+    Generates a unique name for each configuration
+    
+    Parameters
+    ----------
+    
+    c: dict
+       A valid configuration for FastTextHandler
+
+    Returns
+    -------
+
+    A name for the input configuration `c`
+    
+    """
     h = sorted(c.items(), key=lambda x: x[0])
     return "_".join(["{0}={1}".format(k, v) for k, v in h if k[0] != '_'])
 
@@ -88,10 +127,46 @@ if not os.path.exists(fastTextPath):
 
 
 class FastTextHandler(object):
+    """
+    The fastText handler
+
+    Parameters
+    ----------
+    mask_users: bool
+       Specifies if user mentions are conflated as `_usr` or left untouched
+    mask_urls: bool
+       Specifies if url occurrences are conflated as `_url` or left untouched
+    mask_nums: bool
+       Specifies if number occurrences are conflated as `_num` or left untouched
+    mask_hashtags: bool
+       Specifies if hashtags occurrences are conflated as `_htag` or left untouched
+    mask_rep: bool
+       Specifies if consecutive repetitions of a single character more than three times are
+       conflated to `*` or left untouched
+    wn: int
+       controls the `wordNgrams` hyper-parameter of fastText (maximum length of word n-grams)
+    lr: float
+        controls the `lr` hyper-parameter of fastText (learning rate)
+    epoch: int
+        controls the `epoch` hyper-parameter of fastText (number of epochs in the learning process)
+    dim: int
+       controls the `dim` hyper-parameter of fastText (the dimension of word-embedding vectors)
+    ws: int
+       controls the `ws` hyper-parameter of fastText (the window size for learning embeddings)
+    minn: int
+       controls the `minn` hyper-parameter of fastText (minimum length of character n-grams for subwords)
+    maxn: int
+       controls the `maxn` hyper-parameter of fastText (maximum length of character n-grams for subwords)
+    tmp: str
+       the temporary directory to be used for models
+    text_key: str
+       the name of the keyword to access textual data in input examples
+    """
     def __init__(self,
                  mask_users=True, mask_urls=True, mask_nums=True, mask_hashtags=True, mask_rep=True,
                  wn=2, lr=0.1, epoch=10, dim=100, ws=5, minn=0, maxn=0,
                  tmp=".", text_key="text"):
+        
         self.wn = wn
         self.mask_users = mask_users
         self.mask_urls = mask_urls
@@ -108,9 +183,35 @@ class FastTextHandler(object):
         self.text_key = text_key
 
     def get_name(self, prefix):
+        """
+        Generates a filename for the current configuration 
+
+
+        Parameters
+        ----------
+        prefix: str
+           commonly, the output directory of the output model
+
+        Returns
+        -------
+        A file's path for the fastText models
+        """
         return prefix + config_id(self.__dict__)
 
     def normalize_one(self, text):
+        """
+        Normalizes a single text
+
+        Parameters
+        ----------
+        text: str
+           A text message to be normalized
+
+        Returns
+        -------
+
+        Returns the normalized text
+        """
         _text = norm.normalize(
             text,
             mask_users=self.mask_users,
@@ -122,6 +223,20 @@ class FastTextHandler(object):
         return _text
     
     def normalize_as_input(self, X, y=None):
+        """
+        Creates a fastText's input from the given classification task
+
+        Parameters
+        ----------
+        X: an array of dict objects
+           A list of items to send as fastText's input
+        y: an array of labels, optional
+           A list of labels associated to `X`
+
+        Returns
+        -------
+        A valid fastText input data
+        """
         f = io.StringIO()
         for i, x in enumerate(X):
             if y is None:
@@ -140,9 +255,28 @@ class FastTextHandler(object):
         return f.getvalue()
 
     def load(self, model):
+        """
+        Puts the model name
+        
+        """
         self._model = model
         
     def fit(self, X, y):
+        """
+        Creates the model for the given training set (`X`, `y`)
+
+        Parameters
+        ----------
+        X: an array of dict objects
+           A list of dictionaries; each one contains the "text" keyword to access the textual data (see `text_key`)
+        y: an array of labels
+           A list of labels associated to `X`
+
+        Returns
+        -------
+
+        The self object
+        """
         name = self.get_name("model.")
         self._model = mktemp(prefix=name, dir=self.tmp)
         data = self.normalize_as_input(X, y)
@@ -164,6 +298,9 @@ class FastTextHandler(object):
         return self
 
     def delete_model_file(self):
+        """
+        Deletes the underlying model file (internal method)
+        """
         for e in ('.bin', '.vec'):
             try:
                 os.unlink(self._model + e)
@@ -172,21 +309,68 @@ class FastTextHandler(object):
                 print(e, file=sys.stderr)
                 
     def decision_function(self, X):
+        """
+        Computes and retrieves the decision function of each item in `X` using predict-prob
+
+        Parameters
+        ----------
+        X: an array of dict objects
+           A list of dictionaries; each one contains the "text" keyword to access the textual data (see `text_key`)
+ 
+        Returns
+        -------
+        
+        Returns a list of vectors in input's order
+        """
         test = self.normalize_as_input(X)
         dfun = subprocess.check_output([fastTextPath, "predict-prob", self._model + ".bin", "-", "10000"], input=test, encoding='utf8')
         dfun = norm.encode_prediction(dfun.split('\n'))
         return dfun
 
     def predict(self, X):
+        """
+        Computes the label's prediction for each item in `X`
+
+        Parameters
+        ----------
+        X: an array of dict objects
+           A list of dictionaries; each one contains the "text" keyword to access the textual data (see `text_key`)
+ 
+        Returns
+        -------
+        Returns a list of labels in input's order
+
+        """
         data = self.normalize_as_input(X)
         proc = subprocess.Popen([fastTextPath, "predict", self._model + ".bin", "-", "1"],
                                 stdin=subprocess.PIPE, encoding='utf8', stdout=subprocess.PIPE)
+        
         outs, errs = proc.communicate(input=data)
         out = [int(line.replace('__label__', '')) for line in outs.split('\n') if len(line) > 0]
         return out
 
 
 def run_one(config, X, y, Xtest, ytest):
+    """
+    Measures the performance of fastText with a given configuration, training set and validation set
+
+    Parameters
+    ----------
+    config: dict
+       A valid configuration for FastTextHandler
+    X: an array of dict objects
+       Training set. A list of dictionaries; each one contains the "text" keyword to access the textual data (see `text_key`)
+    y: an array of labels
+       A list of labels associated to `X`
+    Xtest: an array of dict objects
+       Validation set. Idem `X`
+    ytest: an array of labels
+       A list of labels associated to `Xtest`
+
+    Returns
+    -------
+    The score (currently macro-recall)
+    """
     ft = FastTextHandler(**config).fit(X, y)
     hy = ft.predict(Xtest)
     score = recall_score(ytest, hy, average='macro')
@@ -197,6 +381,27 @@ def run_one(config, X, y, Xtest, ytest):
 
 
 def run_kfold(data):
+    """
+    Measures the performance of fastText on the tuple `data` using k-folds
+    This function was designed to be used in multiprocessing mapping
+    
+    Parameters
+    ----------
+    - data: tuple
+        Contains the configuration for FastTextHandler, the training set (X, y) and the kfolds partitioning
+        
+    config: dict
+       A valid configuration for FastTextHandler
+    X: an array of dict objects
+       Training set. A list of dictionaries; each one contains the "text" keyword to access the textual data (see `text_key`)
+    y: an array of labels
+       A list of labels associated to `X`
+
+    Returns
+    -------
+    The score, i.e., average of all folds
+
+    """
     config, Xfull, yfull, kfolds = data
     # kfolds = StratifiedKFold(n_splits=n_splits)
 
@@ -208,6 +413,25 @@ def run_kfold(data):
 
 
 def search_params(X, y, pool, bsize=32, esize=4, n_splits=3):
+    """
+    Searches for the best fastText configuration on `X` and `y` using beam-search meta-heuristic
+
+    Parameters
+    ----------
+    
+    X: an array of dictionaries with the actual textual data stored under the "text" keyword
+       examples for training (dictionaries containing text)
+    y: an array of labels
+       labels associated to `X`
+    pool: multiprocessing.Pool
+       a pool of workers
+    bsize: int
+       a hyper-parameter that controls the beam's size (how many best configurations are stored along the search process)
+    esize: int
+       a hyper-paramter  that controls how many best items (among the beam) are explored at each iteration
+    n_splits: int
+       determines the number of folds to measure the score
+    """
     space = ConfigSpace()
     tabu = set()
     data_list = []
