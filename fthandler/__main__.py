@@ -67,7 +67,7 @@ def predict(args):
     
     # hy = le.inverse_transform(ft.predict(Xtest))
     # print(ft.decision_function(Xtest))
-    hy = ft.decision_function(Xtest)
+    hy = ft.predict_prob(Xtest)
     
     def save(f):
         for x, _hy in zip(Xtest, hy):

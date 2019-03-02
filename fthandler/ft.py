@@ -305,10 +305,12 @@ class FastTextHandler(object):
             except Exception as e:
                 print("A problem was found while removing model files {0}".format(self._modelname), file=sys.stderr)
                 print(e, file=sys.stderr)
-                
-    def decision_function(self, X):
+
+
+    @contextmanager
+    def predict_prob_loop(self):
         """
-        Computes and retrieves the decision function of each item in `X` using predict-prob
+        Computes and retrieves the decision function of each item in `X` using predict-prob. It must be used inside a `with` statement
 
         Parameters
         ----------
@@ -320,6 +322,36 @@ class FastTextHandler(object):
         
         Returns a list of vectors in input's order
         """
+        proc = subprocess.Popen([fastTextPath, "predict-prob", self._modelname + ".bin", "-", "1000"],
+                                stdin=subprocess.PIPE, encoding='utf8', stdout=subprocess.PIPE)
+
+        def predict(X):
+            data = self.normalize_as_input([X])
+            proc.stdin.write(data)
+            proc.stdin.flush()
+            return norm.encode_predict_prob(proc.stdout.readline())
+
+        yield predict
+        proc.kill()
+    
+    def predict_prob(self, X):
+        """
+        Computes class's probabilities for each item in `X` using predict-prob
+
+        Parameters
+        ----------
+        X: an array of dict objects
+           A list of dictionaries; each one contains the "text" keyword to access the textual data (see `text_key`)
+ 
+        Returns
+        -------
+        
+        Returns a list of vectors in input's order
+        """
+
+        with self.predict_prob_loop() as predict_prob:
+            return [predict_prob(w) for w in X]
+        
         test = self.normalize_as_input(X)
         dfun = subprocess.check_output([fastTextPath, "predict-prob", self._modelname + ".bin", "-", "10000"], input=test, encoding='utf8')
         dfun = norm.encode_prediction(dfun.split('\n'))

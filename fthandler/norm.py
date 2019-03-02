@@ -117,21 +117,13 @@ def normalize(text, del_diac=True, del_punc=False, emoticons_to_emojis=True, mas
     return normalize_words("".join(L), mask_users=mask_users, mask_hashtags=mask_hashtags, mask_nums=mask_nums)
 
 
-def encode_prediction(lines):
-    out = []
-    for line in lines:
-        arr = line.replace('__label__', '').strip().split()
-        L = []
-        while len(arr):
-            v = arr.pop()
-            k = arr.pop()
-            L.append((k, v))
+def encode_predict_prob(line):
+    arr = line.replace('__label__', '').strip().split()
+    L = []
+    while len(arr):
+        v = arr.pop()
+        k = arr.pop()
+        L.append((k, v))
 
-        L.sort(key=lambda x: x[0])
-        L = [float(x[1]) for x in L]
-        # arr = line.rstrip().split('__label__')[1:]
-        # print(" ".join(L))
-        if len(L) > 0:
-            out.append(L)
-
-    return out
+    L.sort(key=lambda x: x[0])
+    return [float(x[1]) for x in L]
