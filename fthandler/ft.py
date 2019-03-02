@@ -11,6 +11,7 @@ from sklearn.metrics import recall_score, f1_score
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import StratifiedKFold
 import pickle
+from contextlib import contextmanager
 
 
 class ConfigSpace(object):
@@ -281,8 +282,9 @@ class FastTextHandler(object):
         with open(train, "w") as f:
             f.write(data)
 
-        args = [fastTextPath, "supervised", "-input", train, "-output", self._modelname, "-wordNgrams", str(self.wn), "-lr", str(self.lr), "-epoch", str(self.epoch),
-                "-dim", str(self.dim), "-ws", str(self.ws), "-minn", str(self.minn), "-maxn", str(self.maxn), "-thread", "1"]
+        args = [fastTextPath, "supervised", "-input", train, "-output", self._modelname, "-wordNgrams", str(self.wn),
+                "-lr", str(self.lr), "-epoch", str(self.epoch), "-dim", str(self.dim), "-ws", str(self.ws),
+                "-minn", str(self.minn), "-maxn", str(self.maxn), "-thread", "1"]
         proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding='utf8')
         outs, errs = proc.communicate()
 
@@ -345,7 +347,7 @@ class FastTextHandler(object):
         out = [int(line.replace('__label__', '')) for line in outs.split('\n') if len(line) > 0]
         return out
 
-
+    
 def run_one(config, X, y, Xtest, ytest, text_key):
     """
     Measures the performance of fastText with a given configuration, training set and validation set

@@ -25,9 +25,6 @@ def train(args):
     with open(args.training) as f:
         X = [json.loads(line) for line in f.readlines()]
 
-    # paramsfile = os.environ.get('params', trainfile + ".params")
-    # procs = int(os.environ.get('procs', '8'))
-
     y = [x[args.klass] for x in X]
     le = LabelEncoder().fit(y)
     y = le.transform(y)
@@ -74,6 +71,7 @@ def predict(args):
     
     def save(f):
         for x, _hy in zip(Xtest, hy):
+            # x[args.klass] = _hy
             x[args.klass] = le.inverse_transform([np.argmax(_hy)])[0]
             x[args.klass + '_prob'] = _hy
             print(json.dumps(x, sort_keys=True), file=f)
