@@ -165,7 +165,7 @@ class FastTextHandler(object):
     def __init__(self,
                  mask_users=True, mask_urls=True, mask_nums=True, mask_hashtags=True, mask_rep=True,
                  wn=2, lr=0.1, epoch=10, dim=100, ws=5, minn=0, maxn=0,
-                 tmp=".", text_key="text"):
+                 tmp=".", text_key="text", model=None):
         
         self.wn = wn
         self.mask_users = mask_users
@@ -181,10 +181,11 @@ class FastTextHandler(object):
         self.maxn = maxn
         self.tmp = tmp
         self.text_key = text_key
+        self._modelname = model
 
     def get_name(self, prefix):
         """
-        Generates a filename for the current configuration 
+        Generates a filename for the current configuration
 
 
         Parameters
@@ -253,13 +254,6 @@ class FastTextHandler(object):
                 print("__label__{0} {1}".format(label, text), file=f)
         
         return f.getvalue()
-
-    def load(self, model):
-        """
-        Puts the model name
-        
-        """
-        self._model = model
         
     def fit(self, X, y):
         """
@@ -277,20 +271,22 @@ class FastTextHandler(object):
 
         The self object
         """
-        name = self.get_name("model.")
-        self._model = mktemp(prefix=name, dir=self.tmp)
+        if self._modelname is None:
+            name = self.get_name("model.")
+            self._modelname = mktemp(prefix=name, dir=self.tmp)
+
         data = self.normalize_as_input(X, y)
         # currently fasttext doesn't support training from stdin
-        train = self._model + ".input"
+        train = self._modelname + ".input"
         with open(train, "w") as f:
             f.write(data)
 
-        args = [fastTextPath, "supervised", "-input", train, "-output", self._model, "-wordNgrams", str(self.wn), "-lr", str(self.lr), "-epoch", str(self.epoch),
+        args = [fastTextPath, "supervised", "-input", train, "-output", self._modelname, "-wordNgrams", str(self.wn), "-lr", str(self.lr), "-epoch", str(self.epoch),
                 "-dim", str(self.dim), "-ws", str(self.ws), "-minn", str(self.minn), "-maxn", str(self.maxn), "-thread", "1"]
         proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding='utf8')
         outs, errs = proc.communicate()
 
-        if not os.path.isfile(self._model + ".bin"):
+        if not os.path.isfile(self._modelname + ".bin"):
             raise Exception("An error arised while creating a FT model with the following command:\n{0}".format(" ".join(args)))
 
         os.unlink(train)
@@ -303,9 +299,9 @@ class FastTextHandler(object):
         """
         for e in ('.bin', '.vec'):
             try:
-                os.unlink(self._model + e)
+                os.unlink(self._modelname + e)
             except Exception as e:
-                print("A problem was found while removing model files {0}".format(self._model), file=sys.stderr)
+                print("A problem was found while removing model files {0}".format(self._modelname), file=sys.stderr)
                 print(e, file=sys.stderr)
                 
     def decision_function(self, X):
@@ -323,7 +319,7 @@ class FastTextHandler(object):
         Returns a list of vectors in input's order
         """
         test = self.normalize_as_input(X)
-        dfun = subprocess.check_output([fastTextPath, "predict-prob", self._model + ".bin", "-", "10000"], input=test, encoding='utf8')
+        dfun = subprocess.check_output([fastTextPath, "predict-prob", self._modelname + ".bin", "-", "10000"], input=test, encoding='utf8')
         dfun = norm.encode_prediction(dfun.split('\n'))
         return dfun
 
@@ -342,7 +338,7 @@ class FastTextHandler(object):
 
         """
         data = self.normalize_as_input(X)
-        proc = subprocess.Popen([fastTextPath, "predict", self._model + ".bin", "-", "1"],
+        proc = subprocess.Popen([fastTextPath, "predict", self._modelname + ".bin", "-", "1"],
                                 stdin=subprocess.PIPE, encoding='utf8', stdout=subprocess.PIPE)
         
         outs, errs = proc.communicate(input=data)
@@ -350,7 +346,7 @@ class FastTextHandler(object):
         return out
 
 
-def run_one(config, X, y, Xtest, ytest):
+def run_one(config, X, y, Xtest, ytest, text_key):
     """
     Measures the performance of fastText with a given configuration, training set and validation set
 
@@ -366,12 +362,13 @@ def run_one(config, X, y, Xtest, ytest):
        Validation set. Idem `X`
     ytest: an array of labels
        A list of labels associated to `Xtest`
-
+    text_key: str
+       The keyword to accessing textual data in `X`
     Returns
     -------
     The score (currently macro-recall)
     """
-    ft = FastTextHandler(**config).fit(X, y)
+    ft = FastTextHandler(text_key=text_key, **config).fit(X, y)
     hy = ft.predict(Xtest)
     score = recall_score(ytest, hy, average='macro')
     # score = (np.array(ytest) == np.array(hy)).mean()
@@ -395,31 +392,33 @@ def run_kfold(data):
     X: an array of dict objects
        Training set. A list of dictionaries; each one contains the "text" keyword to access the textual data (see `text_key`)
     y: an array of labels
-       A list of labels associated to `X`
+       A list of labels associated to `X`,
+    text_key: str
+       The key for accessing textual data in `X`
 
     Returns
     -------
     The score, i.e., average of all folds
 
     """
-    config, Xfull, yfull, kfolds = data
+    config, Xfull, yfull, kfolds, text_key = data
     # kfolds = StratifiedKFold(n_splits=n_splits)
 
     score = 0.0
     for train_index, val_index in kfolds.split(X, y):
-        score += run_one(config, Xfull[train_index], yfull[train_index], Xfull[val_index], yfull[val_index])
+        score += run_one(config, Xfull[train_index], yfull[train_index], Xfull[val_index], yfull[val_index], text_key)
 
     return score / kfolds.get_n_splits(), config
 
 
-def search_params(X, y, pool, bsize=32, esize=4, n_splits=3):
+def search_params(X, y, pool, bsize=32, esize=4, n_splits=3, text_key='text'):
     """
     Searches for the best fastText configuration on `X` and `y` using beam-search meta-heuristic
 
     Parameters
     ----------
     
-    X: an array of dictionaries with the actual textual data stored under the "text" keyword
+    X: an array of dictionaries
        examples for training (dictionaries containing text)
     y: an array of labels
        labels associated to `X`
@@ -431,6 +430,8 @@ def search_params(X, y, pool, bsize=32, esize=4, n_splits=3):
        a hyper-paramter  that controls how many best items (among the beam) are explored at each iteration
     n_splits: int
        determines the number of folds to measure the score
+    text_key: str
+       the key used to access textual data in each item of `X`
     """
     space = ConfigSpace()
     tabu = set()
@@ -445,7 +446,7 @@ def search_params(X, y, pool, bsize=32, esize=4, n_splits=3):
 
         tabu.add(h)
         # data_list.append((c, X, y, Xtest, ytest))
-        data_list.append((c, X, y, kfolds))
+        data_list.append((c, X, y, kfolds, text_key))
 
     prev = 0
     curr = 0
