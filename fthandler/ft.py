@@ -4,7 +4,7 @@ import os
 import sys
 import json
 import numpy as np
-import fthandler.norm
+import fthandler.norm as norm
 from random import choice
 from tempfile import mktemp
 from sklearn.metrics import recall_score, f1_score
@@ -405,13 +405,13 @@ def run_kfold(data):
     # kfolds = StratifiedKFold(n_splits=n_splits)
 
     score = 0.0
-    for train_index, val_index in kfolds.split(X, y):
+    for train_index, val_index in kfolds.split(Xfull, yfull):
         score += run_one(config, Xfull[train_index], yfull[train_index], Xfull[val_index], yfull[val_index], text_key)
 
     return score / kfolds.get_n_splits(), config
 
 
-def search_params(X, y, pool, bsize=32, esize=4, n_splits=3, text_key='text'):
+def search_params(X, y, pool, bsize=32, esize=4, n_splits=3, tol=0.001, text_key='text'):
     """
     Searches for the best fastText configuration on `X` and `y` using beam-search meta-heuristic
 
@@ -430,6 +430,8 @@ def search_params(X, y, pool, bsize=32, esize=4, n_splits=3, text_key='text'):
        a hyper-paramter  that controls how many best items (among the beam) are explored at each iteration
     n_splits: int
        determines the number of folds to measure the score
+    tol: float
+       minimum improvement tolerance for the optimization process
     text_key: str
        the key used to access textual data in each item of `X`
     """
@@ -458,7 +460,7 @@ def search_params(X, y, pool, bsize=32, esize=4, n_splits=3, text_key='text'):
         best_list.sort(key=lambda x: x[0], reverse=True)
 
         curr = best_list[0][0]
-        if curr == prev:
+        if abs(curr - prev) <= tol:
             break
 
         with open('best_list.json.tmp', 'w') as f:
@@ -475,7 +477,7 @@ def search_params(X, y, pool, bsize=32, esize=4, n_splits=3, text_key='text'):
 
                 tabu.add(h)
                 # data_list.append((c, X, y, Xtest, ytest))
-                data_list.append((c, X, y, kfolds))
+                data_list.append((c, X, y, kfolds, text_key))
 
         if len(data_list) > bsize:
             np.random.shuffle(data_list)

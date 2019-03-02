@@ -34,13 +34,14 @@ def train(args):
     pool = Pool(args.nprocs)
 
     best_list = search_params(np.array(X), np.array(y), pool,
-        bsize=args.bsize, esize=args.esize, n_splits=args.kfolds, text_key=args.text)
+                              bsize=args.bsize, esize=args.esize, n_splits=args.kfolds, tol=args.tol,
+                              text_key=args.text)
 
     print('saving best list', file=sys.stderr)
     with open(args.model + '.params', 'w') as f:
         print(json.dumps(best_list, indent=2, sort_keys=True), file=f)
 
-    ft = FastTextHandler(model=args.model, **params).fit(X, y)
+    ft = FastTextHandler(model=args.model, **best_list[0][-1]).fit(X, y)
     with open(args.model + '.pickle', "wb") as f:
         pickle.dump((ft, le), f)
 
@@ -84,12 +85,12 @@ if __name__ == '__main__':
         'train', help='optimizes fastText parameter for the given task'
     )
     parser_train.add_argument("training", help="training file; each line is a json per line")
-    parser_train.add_argument("-m", "--model", required=True, help="the prefix to save models and parameters")
-    parser_train.add_argument("-b", "--bsize", default=32, help="beam size for hyper-parameter optimization")
-    parser_train.add_argument("-e", "--esize", default=32, help="explore this number of best configurations' neighbors")
-    parser_train.add_argument("-k", "--kfolds", default=3, help="k for the k-fold cross-validation")
-    parser_train.add_argument("-n", "--nprocs", help="number of workers to spawn (it uses multiprocessing module)")
-
+    parser_train.add_argument("-m", "--model", type=str, required=True, help="the prefix to save models and parameters")
+    parser_train.add_argument("-b", "--bsize", type=int, default=16, help="beam size for hyper-parameter optimization")
+    parser_train.add_argument("-e", "--esize", type=int, default=4, help="explore this number of best configurations' neighbors")
+    parser_train.add_argument("-k", "--kfolds", type=int, default=3, help="k for the k-fold cross-validation")
+    parser_train.add_argument("-n", "--nprocs", type=int, help="number of workers to spawn (it uses multiprocessing module)")
+    parser_train.add_argument("-t", "--tol", type=float, default=0.001, help="minimum improvement per iteration")
     parser_predict = subparsers.add_parser(
         'predict', help='prediction of input samples'
     )
@@ -97,11 +98,11 @@ if __name__ == '__main__':
     parser_predict.add_argument("test", help="test file; each line is a json per line")
 
     args = parser.parse_args()
-    
+
     if hasattr(args, "training"):
         train(args)
     elif hasattr(args, "model"):
         predict(args)
     else:
-        print("Usage: {0} train|predict train.json test.json".format(sys.argv[0]), file=sys.stderr)
+        args.print_help()
         sys.exit(-1)
