@@ -306,7 +306,6 @@ class FastTextHandler(object):
                 print("A problem was found while removing model files {0}".format(self._modelname), file=sys.stderr)
                 print(e, file=sys.stderr)
 
-
     @contextmanager
     def predict_prob_loop(self):
         """
@@ -371,13 +370,7 @@ class FastTextHandler(object):
         Returns a list of labels in input's order
 
         """
-        data = self.normalize_as_input(X)
-        proc = subprocess.Popen([fastTextPath, "predict", self._modelname + ".bin", "-", "1"],
-                                stdin=subprocess.PIPE, encoding='utf8', stdout=subprocess.PIPE)
-        
-        outs, errs = proc.communicate(input=data)
-        out = [int(line.replace('__label__', '')) for line in outs.split('\n') if len(line) > 0]
-        return out
+        return [np.argmax(x) for x in self.predict_prob(X)]
 
     
 def run_one(config, X, y, Xtest, ytest, text_key):
