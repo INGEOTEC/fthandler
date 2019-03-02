@@ -82,6 +82,22 @@ def predict(args):
         with open(args.output, 'w') as f:
             save(f)
         
+def sentence_vectors(args):
+    name = args.model.replace(".pickle", "")
+    with open(name + ".pickle", "rb") as f:
+        ft, le = pickle.load(f)
+        ft.model = name
+        ft.text_key = args.text
+
+    with open(args.dataset) as f:
+        Xtest = [json.loads(line) for line in f.readlines()]
+
+    f = sys.stdout
+    for x, vec in zip(Xtest, ft.sentence_vectors(Xtest)):
+        x[args.vec] = vec
+        # print(" ".join(map(str, vec)), file=f)
+        print(json.dumps(x, sort_keys=1), file=f)
+
 
 if __name__ == '__main__':
     from multiprocessing import Pool
@@ -106,12 +122,21 @@ if __name__ == '__main__':
     parser_predict.add_argument("test", help="test file; each line is a json per line")
     # parser_predict.add_argument("-p", "--prob", default=False, action='store_true', help="add probabilities")
     parser_predict.add_argument("-o", "--output", default=None, help="filename to save predictions")
+
+    parser_vectors = subparsers.add_parser(
+        'print-sentence-vectors', help='computes and prints sentence vectors for each input'
+    )
+    parser_vectors.add_argument("model", help="model file; created with train")
+    parser_vectors.add_argument("dataset", help="input file; each line is a json per line")
+    parser.add_argument("--vec", default="vec", help="key to store computed sentence vector")
     args = parser.parse_args()
 
     if hasattr(args, "training"):
         train(args)
-    elif hasattr(args, "model"):
+    elif hasattr(args, "test"):
         predict(args)
+    elif hasattr(args, "dataset"):
+        sentence_vectors(args)        
     else:
         args.print_help()
         sys.exit(-1)

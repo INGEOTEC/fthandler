@@ -200,21 +200,24 @@ class FastTextHandler(object):
         """
         return prefix + config_id(self.__dict__)
 
-    def normalize_one(self, text):
+    def normalize_one(self, x, label=None):
         """
         Normalizes a single text
 
         Parameters
         ----------
-        text: str
-           A text message to be normalized
+        x: dict
+           A dictionary containing textual data (keyword specified in `self.text_key`)
+        label: int or str or None
+           An integer or string label associated to `text`
 
         Returns
         -------
 
-        Returns the normalized text
+        Returns the normalized text prepared to be used as fastText's input
         """
-        _text = norm.normalize(
+        text = x[self.text_key]
+        text = norm.normalize(
             text,
             mask_users=self.mask_users,
             mask_urls=self.mask_urls,
@@ -222,9 +225,13 @@ class FastTextHandler(object):
             mask_hashtags=self.mask_hashtags,
             mask_rep=self.mask_rep
         )
-        return _text
+        
+        if label is None:
+            return text
+        else:
+            return "__{0}__ {1}".format(label, text)
     
-    def normalize_as_input(self, X, y=None):
+    def normalize_array(self, X, y=None):
         """
         Creates a fastText's input from the given classification task
 
@@ -246,13 +253,7 @@ class FastTextHandler(object):
             else:
                 label = y[i]
 
-            text = x[self.text_key]
-            text = self.normalize_one(text)
-
-            if label is None:
-                print(text, file=f)
-            else:
-                print("__label__{0} {1}".format(label, text), file=f)
+            print(self.normalize_one(x, label=label), file=f)
         
         return f.getvalue()
         
@@ -276,7 +277,7 @@ class FastTextHandler(object):
             name = self.get_name("model.")
             self._modelname = mktemp(prefix=name, dir=self.tmp)
 
-        data = self.normalize_as_input(X, y)
+        data = self.normalize_array(X, y)
         # currently fasttext doesn't support training from stdin
         train = self._modelname + ".input"
         with open(train, "w") as f:
@@ -309,30 +310,28 @@ class FastTextHandler(object):
     @contextmanager
     def predict_prob_loop(self):
         """
-        Computes and retrieves the decision function of each item in `X` using predict-prob. It must be used inside a `with` statement
-
-        Parameters
-        ----------
-        X: an array of dict objects
-           A list of dictionaries; each one contains the "text" keyword to access the textual data (see `text_key`)
- 
+        Creates a context manager ("with" syntax) to evaluate predict probabilities. The function created receives a unique parameter `X`
+        which is a list of dictionaries; each one contains the "text" keyword to access the textual data (see `text_key`). The function returns
+        the associated probabilities for each class for each item 
+        
         Returns
         -------
-        
-        Returns a list of vectors in input's order
+        A context manager
+
         """
         proc = subprocess.Popen([fastTextPath, "predict-prob", self._modelname + ".bin", "-", "1000"],
                                 stdin=subprocess.PIPE, encoding='utf8', stdout=subprocess.PIPE)
 
-        def predict(X):
-            data = self.normalize_as_input([X])
+        def predict(x):
+            data = self.normalize_one(x)
             proc.stdin.write(data)
+            proc.stdin.write('\n')
             proc.stdin.flush()
             return norm.encode_predict_prob(proc.stdout.readline())
 
         yield predict
         proc.kill()
-    
+
     def predict_prob(self, X):
         """
         Computes class's probabilities for each item in `X` using predict-prob
@@ -347,15 +346,9 @@ class FastTextHandler(object):
         
         Returns a list of vectors in input's order
         """
-
         with self.predict_prob_loop() as predict_prob:
             return [predict_prob(w) for w in X]
         
-        test = self.normalize_as_input(X)
-        dfun = subprocess.check_output([fastTextPath, "predict-prob", self._modelname + ".bin", "-", "10000"], input=test, encoding='utf8')
-        dfun = norm.encode_prediction(dfun.split('\n'))
-        return dfun
-
     def predict(self, X):
         """
         Computes the label's prediction for each item in `X`
@@ -370,7 +363,33 @@ class FastTextHandler(object):
         Returns a list of labels in input's order
 
         """
-        return [np.argmax(x) for x in self.predict_prob(X)]
+        return np.argmax(self.predict_prob(X), axis=1)
+
+    @contextmanager
+    def sentence_vectors_loop(self):
+        """
+        Creates a function to compute sentence vectors (use "with" syntax).
+        
+        """
+        proc = subprocess.Popen([fastTextPath, "print-sentence-vectors", self._modelname + ".bin"],
+                                stdin=subprocess.PIPE, encoding='utf8', stdout=subprocess.PIPE)
+
+        def fun(x):
+            data = self.normalize_one(x)
+            proc.stdin.write(data)
+            proc.stdin.write('\n')
+            proc.stdin.flush()
+            return [float(d) for d in proc.stdout.readline().split()]
+
+        yield fun
+        proc.kill()
+
+    def sentence_vectors(self, X):
+        """
+        Returns sentence vectors for each item in X
+        """
+        with self.sentence_vectors_loop() as vector:
+            return [vector(w) for w in X]
 
     
 def run_one(config, X, y, Xtest, ytest, text_key):
