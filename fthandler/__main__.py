@@ -60,7 +60,7 @@ def predict(args):
     one prediction per line (one valid JSON per line)
     """
     name = args.model.replace(".pickle", "")
-    with open(name, "rb") as f:
+    with open(name + ".pickle", "rb") as f:
         ft, le = pickle.load(f)
         ft.model = name
         ft.text_key = args.text
@@ -68,12 +68,22 @@ def predict(args):
     with open(args.test) as f:
         Xtest = [json.loads(line) for line in f.readlines()]
     
-    hy = le.inverse_transform(ft.predict(Xtest))
-    f = sys.stdout   
-    for x, _hy in zip(Xtest, hy):
-        x[args.klass] = _hy
-        print(json.dumps(x, sort_keys=True), file=f)
+    # hy = le.inverse_transform(ft.predict(Xtest))
+    # print(ft.decision_function(Xtest))
+    hy = ft.decision_function(Xtest)
+    
+    def save(f):
+        for x, _hy in zip(Xtest, hy):
+            x[args.klass] = le.inverse_transform([np.argmax(_hy)])[0]
+            x[args.klass + '_prob'] = _hy
+            print(json.dumps(x, sort_keys=True), file=f)
 
+    if args.output is None or args.output == '-':
+        save(sys.stdout)
+    else:
+        with open(args.output, 'w') as f:
+            save(f)
+        
 
 if __name__ == '__main__':
     from multiprocessing import Pool
@@ -96,7 +106,8 @@ if __name__ == '__main__':
     )
     parser_predict.add_argument("model", help="model file; created with train")
     parser_predict.add_argument("test", help="test file; each line is a json per line")
-
+    # parser_predict.add_argument("-p", "--prob", default=False, action='store_true', help="add probabilities")
+    parser_predict.add_argument("-o", "--output", default=None, help="filename to save predictions")
     args = parser.parse_args()
 
     if hasattr(args, "training"):

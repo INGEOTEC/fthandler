@@ -290,7 +290,7 @@ class FastTextHandler(object):
             raise Exception("An error arised while creating a FT model with the following command:\n{0}".format(" ".join(args)))
 
         os.unlink(train)
-        print('finished', name, file=sys.stderr)
+        print('finished', self._modelname, file=sys.stderr)
         return self
 
     def delete_model_file(self):
