@@ -79,7 +79,30 @@ def predict(args):
     else:
         with open(args.output, 'w') as f:
             save(f)
-        
+
+
+def normalize_collection(args):
+    if args.params is None:
+        ft = FastTextHandler(model=None)
+    else:
+        with open(args.params) as f:
+            params = json.load(f)
+
+        if isinstance(params, (list, tuple)):
+            params = params[0][-1]  # a best list file
+
+        ft = FastTextHandler(model=None, **params)
+
+    with open(args.collection) as f:
+        while True:
+            line = f.readline()
+            if len(line) == 0:
+                break
+ 
+            data = ft.normalize_one(json.loads(line))
+            print(data, file=sys.stdout)
+
+
 def sentence_vectors(args):
     name = args.model.replace(".pickle", "")
     with open(name + ".pickle", "rb") as f:
@@ -127,6 +150,13 @@ if __name__ == '__main__':
     parser_vectors.add_argument("model", help="model file; created with train")
     parser_vectors.add_argument("dataset", help="input file; each line is a json per line")
     parser.add_argument("--vec", default="vec", help="key to store computed sentence vector")
+
+    parser_norm = subparsers.add_parser(
+        'normalize', help='extracts text from a collection and normalizes it'
+    )
+    parser_norm.add_argument("collection", help="input file; each line is a json per line")
+    parser_norm.add_argument("-p", "--params", default=None, help="params; created with train or by hand; if not given default parameters will be used")
+
     args = parser.parse_args()
 
     if hasattr(args, "training"):
@@ -134,7 +164,10 @@ if __name__ == '__main__':
     elif hasattr(args, "test"):
         predict(args)
     elif hasattr(args, "dataset"):
-        sentence_vectors(args)        
+        sentence_vectors(args)
+    elif hasattr(args, "collection"):
+        normalize_collection(args)
     else:
-        args.print_help()
+        parser.print_help()
+        # args.print_help()
         sys.exit(-1)
