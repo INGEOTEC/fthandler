@@ -9,11 +9,11 @@ from fthandler import norm
 from random import choice
 from tempfile import mktemp
 import pickle
-from argparse import ArgumentParser
+from argparse import ArgumentParser, SUPPRESS
 from sklearn.preprocessing import LabelEncoder
 
 
-def train(args):
+def train_main(args):
     """
     searches for best parameters and creates a fastText model
 
@@ -43,7 +43,7 @@ def train(args):
         pickle.dump((ft, le), f)
 
 
-def predict(args):
+def predict_main(args):
     """
     Predicts and prints to stdout the prediction of a test file
 
@@ -61,27 +61,41 @@ def predict(args):
         ft, le = pickle.load(f)
         ft.model = name
         ft.text_key = args.text
-
-    with open(args.test) as f:
-        Xtest = [json.loads(line) for line in f.readlines()]
     
-    hy = ft.predict_prob(Xtest)
-    
-    def save(f):
-        for x, _hy in zip(Xtest, hy):
-            # x[args.klass] = _hy
-            x[args.klass] = le.inverse_transform([np.argmax(_hy)])[0]
-            x[args.klass + '_prob'] = _hy
-            print(json.dumps(x, sort_keys=True), file=f)
+    def read_print_loop(infile, outfile):
+        with ft.predict_prob_loop() as predict_prob:
+            while True:
+                line = infile.readline()
+                if len(line) == 0:
+                    break
 
-    if args.output is None or args.output == '-':
-        save(sys.stdout)
+                if args.raw:
+                    d = {args.text: line.rstrip()}
+                else:
+                    d = json.loads(line)
+
+                hy = predict_prob(d)
+                d[args.klass + '_prob'] = hy
+                d[args.klass] = le.inverse_transform([np.argmax(hy)])[0]
+                print(json.dumps(d, sort_keys=True), file=outfile)
+
+    if args.test == '-':
+        infile = sys.stdin
     else:
-        with open(args.output, 'w') as f:
-            save(f)
+        infile = open(args.test)
+    if args.output == '-':
+        outfile = sys.stdout
+    else:
+        outfile = open(args.output, "w")
+    
+    try:
+        read_print_loop(infile, outfile)
+    finally:
+        infile.close()
+        outfile.close()
 
 
-def normalize_collection(args):
+def normalize_main(args):
     if args.params is None:
         ft = FastTextHandler(model=None)
     else:
@@ -93,32 +107,72 @@ def normalize_collection(args):
 
         ft = FastTextHandler(model=None, **params)
 
-    with open(args.collection) as f:
+    def read_print_loop(f, outfile):
         while True:
             line = f.readline()
             if len(line) == 0:
                 break
- 
-            data = ft.normalize_one(json.loads(line))
-            print(data, file=sys.stdout)
+    
+            if args.raw:
+                d = {args.text: line}
+            else:
+                d = json.loads(line)
+            
+            data = ft.normalize_one(d)
+            print(data, file=outfile)
+
+    if args.test == '-':
+        infile = sys.stdin
+    else:
+        infile = open(args.test)
+    if args.output == '-':
+        outfile = sys.stdout
+    else:
+        outfile = open(args.output, "w")
+    
+    try:
+        read_print_loop(infile, outfile)
+    finally:
+        infile.close()
+        outfile.close()
 
 
-def sentence_vectors(args):
+def sentence_vectors_main(args):
     name = args.model.replace(".pickle", "")
     with open(name + ".pickle", "rb") as f:
         ft, le = pickle.load(f)
         ft.model = name
         ft.text_key = args.text
 
-    with open(args.dataset) as f:
-        Xtest = [json.loads(line) for line in f.readlines()]
+    def read_print_loop(infile, outfile):
+        with ft.sentence_vectors_loop() as sentence_vector:
+            while True:
+                line = infile.readline()
+                if len(line) == 0:
+                    break
 
-    f = sys.stdout
-    for x, vec in zip(Xtest, ft.sentence_vectors(Xtest)):
-        x[args.vec] = vec
-        # print(" ".join(map(str, vec)), file=f)
-        print(json.dumps(x, sort_keys=1), file=f)
+                if args.raw:
+                    d = {args.text: line.rstrip()}
+                else:
+                    d = json.loads(line)
 
+                d[args.vec] = sentence_vector(d)
+                print(json.dumps(d, sort_keys=True), file=outfile)
+
+    if args.dataset == '-':
+        infile = sys.stdin
+    else:
+        infile = open(args.dataset)
+    if args.output == '-':
+        outfile = sys.stdout
+    else:
+        outfile = open(args.output, "w")
+
+    try:
+        read_print_loop(infile, outfile)
+    finally:
+        infile.close()
+        outfile.close()
 
 if __name__ == '__main__':
     from multiprocessing import Pool
@@ -129,6 +183,7 @@ if __name__ == '__main__':
     parser_train = subparsers.add_parser(
         'train', help='optimizes fastText parameter for the given task'
     )
+    parser_train.add_argument("--command", default="train", help=SUPPRESS)
     parser_train.add_argument("training", help="training file; each line is a json per line")
     parser_train.add_argument("-m", "--model", type=str, required=True, help="the prefix to save models and parameters")
     parser_train.add_argument("-b", "--bsize", type=int, default=16, help="beam size for hyper-parameter optimization")
@@ -139,34 +194,39 @@ if __name__ == '__main__':
     parser_predict = subparsers.add_parser(
         'predict', help='prediction of input samples'
     )
+    parser_predict.add_argument("--command", default="predict", help=SUPPRESS)
     parser_predict.add_argument("model", help="model file; created with train")
-    parser_predict.add_argument("test", help="test file; each line is a json per line")
+    parser_predict.add_argument("test", default='-', help="test file; each line is a json per line")
     # parser_predict.add_argument("-p", "--prob", default=False, action='store_true', help="add probabilities")
-    parser_predict.add_argument("-o", "--output", default=None, help="filename to save predictions")
-
+    parser_predict.add_argument("-o", "--output", default='-', help="filename to save predictions")
+    parser_predict.add_argument("--raw", default=False, action='store_true', help="raw text is used as input instead of json")
     parser_vectors = subparsers.add_parser(
-        'print-sentence-vectors', help='computes and prints sentence vectors for each input'
+        'sentence-vectors', help='computes and prints sentence vectors for each input'
     )
+    parser_vectors.add_argument("--command", default="sentence-vectors", help=SUPPRESS)
     parser_vectors.add_argument("model", help="model file; created with train")
     parser_vectors.add_argument("dataset", help="input file; each line is a json per line")
-    parser.add_argument("--vec", default="vec", help="key to store computed sentence vector")
-
+    parser_vectors.add_argument("--vec", default="vec", help="key to store computed sentence vector")
+    parser_vectors.add_argument("-o", "--output", default='-', help="filename to save output")
+    parser_vectors.add_argument("--raw", default=False, action='store_true', help="raw text is used as input instead of json")
     parser_norm = subparsers.add_parser(
         'normalize', help='extracts text from a collection and normalizes it'
     )
+    parser_norm.add_argument("--command", default="normalize", help=SUPPRESS)
     parser_norm.add_argument("collection", help="input file; each line is a json per line")
     parser_norm.add_argument("-p", "--params", default=None, help="params; created with train or by hand; if not given default parameters will be used")
+    parser_norm.add_argument("--raw", default=False, action='store_true', help="raw text is used as input instead of json")
 
     args = parser.parse_args()
 
-    if hasattr(args, "training"):
-        train(args)
-    elif hasattr(args, "test"):
-        predict(args)
-    elif hasattr(args, "dataset"):
-        sentence_vectors(args)
-    elif hasattr(args, "collection"):
-        normalize_collection(args)
+    if args.command == "train":
+        train_main(args)
+    elif args.command == "predict":
+        predict_main(args)
+    elif args.command == "sentence-vectors":
+        sentence_vectors_main(args)
+    elif args.command == "normalize":
+        normalize_main(args)
     else:
         parser.print_help()
         # args.print_help()
