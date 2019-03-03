@@ -65,8 +65,6 @@ def predict(args):
     with open(args.test) as f:
         Xtest = [json.loads(line) for line in f.readlines()]
     
-    # hy = le.inverse_transform(ft.predict(Xtest))
-    # print(ft.decision_function(Xtest))
     hy = ft.predict_prob(Xtest)
     
     def save(f):
