@@ -229,7 +229,7 @@ class FastTextHandler(object):
         if label is None:
             return text
         else:
-            return "__{0}__ {1}".format(label, text)
+            return "__label__{0} {1}".format(label, text)
     
     def normalize_array(self, X, y=None):
         """
@@ -280,19 +280,21 @@ class FastTextHandler(object):
         data = self.normalize_array(X, y)
         # currently fasttext doesn't support training from stdin
         train = self._modelname + ".input"
-        with open(train, "w") as f:
-            f.write(data)
+        try:
+            with open(train, "w") as f:
+                f.write(data)
 
-        args = [fastTextPath, "supervised", "-input", train, "-output", self._modelname, "-wordNgrams", str(self.wn),
-                "-lr", str(self.lr), "-epoch", str(self.epoch), "-dim", str(self.dim), "-ws", str(self.ws),
-                "-minn", str(self.minn), "-maxn", str(self.maxn), "-thread", "1"]
-        proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding='utf8')
-        outs, errs = proc.communicate()
+            args = [fastTextPath, "supervised", "-input", train, "-output", self._modelname, "-wordNgrams", str(self.wn),
+                    "-lr", str(self.lr), "-epoch", str(self.epoch), "-dim", str(self.dim), "-ws", str(self.ws),
+                    "-minn", str(self.minn), "-maxn", str(self.maxn), "-thread", "1"]
+            proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding='utf8')
+            outs, errs = proc.communicate()
 
-        if not os.path.isfile(self._modelname + ".bin"):
-            raise Exception("An error arised while creating a FT model with the following command:\n{0}".format(" ".join(args)))
-
-        os.unlink(train)
+            if not os.path.isfile(self._modelname + ".bin"):
+                raise Exception("An error arised while creating a FT model with the following command:\n{0}".format(" ".join(args)))
+        finally:
+            os.unlink(train)
+        
         print('finished', self._modelname, file=sys.stderr)
         return self
 
@@ -327,7 +329,10 @@ class FastTextHandler(object):
             proc.stdin.write(data)
             proc.stdin.write('\n')
             proc.stdin.flush()
-            return norm.encode_predict_prob(proc.stdout.readline())
+            line = proc.stdout.readline()
+            L = norm.encode_predict_prob(line)
+            # print((x, data, line, L), file=sys.stderr)
+            return L
 
         yield predict
         proc.kill()
@@ -363,7 +368,9 @@ class FastTextHandler(object):
         Returns a list of labels in input's order
 
         """
-        return np.argmax(self.predict_prob(X), axis=1)
+        probs = self.predict_prob(X)
+        # print("XXXX LEN:", len(probs), np.unique([len(p) for p in probs]), file=sys.stderr)
+        return np.argmax(probs, axis=1)
 
     @contextmanager
     def sentence_vectors_loop(self):
@@ -414,12 +421,15 @@ def run_one(config, X, y, Xtest, ytest, text_key):
     -------
     The score (currently macro-recall)
     """
-    ft = FastTextHandler(text_key=text_key, **config).fit(X, y)
-    hy = ft.predict(Xtest)
-    score = recall_score(ytest, hy, average='macro')
-    # score = (np.array(ytest) == np.array(hy)).mean()
-    # score = f1_score(le.transform(ydev), le.transform(hy), average='binary')
-    ft.delete_model_file()
+    try:
+        ft = FastTextHandler(text_key=text_key, **config).fit(X, y)
+        hy = ft.predict(Xtest)
+        score = recall_score(ytest, hy, average='macro')
+        # score = (np.array(ytest) == np.array(hy)).mean()
+        # score = f1_score(le.transform(ydev), le.transform(hy), average='binary')
+    finally:
+        ft.delete_model_file()
+        
     return score
 
 
