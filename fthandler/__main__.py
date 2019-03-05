@@ -4,7 +4,7 @@ import os
 import sys
 import json
 import numpy as np
-from fthandler.ft import FastTextHandler, search_params
+from fthandler.ft import FastTextHandler, search_params, ConfigSpace
 from fthandler import norm
 from random import choice
 from tempfile import mktemp
@@ -22,17 +22,31 @@ def train_main(args):
 
     args: ArgParse
     """
+
     with open(args.training) as f:
         X = [json.loads(line) for line in f.readlines()]
 
     y = [x[args.klass] for x in X]
     le = LabelEncoder().fit(y)
     y = le.transform(y)
-    pool = Pool(args.nprocs)
+    
+    if args.params is None:
+        pool = Pool(args.nprocs)
+        best_list = search_params(np.array(X), np.array(y), pool,
+                                bsize=args.bsize, esize=args.esize, n_splits=args.kfolds, tol=args.tol,
+                                text_key=args.text)
+    else:
+        with open(pool.params) as f:
+            best_list = json.load(f)
 
-    best_list = search_params(np.array(X), np.array(y), pool,
-                              bsize=args.bsize, esize=args.esize, n_splits=args.kfolds, tol=args.tol,
-                              text_key=args.text)
+    space = ConfigSpace()
+    if args.space is not None:
+        s = json.loads(args.space)
+        for k, v in s.items():
+            if isinstance(v, (list, tuple)):
+                setattr(space, k, v)
+            else:
+                setattr(space, k, [v])
 
     print('saving best list', file=sys.stderr)
     with open(args.model + '.params', 'w') as f:
@@ -186,6 +200,10 @@ if __name__ == '__main__':
     parser_train.add_argument("--command", default="train", help=SUPPRESS)
     parser_train.add_argument("training", help="training file; each line is a json per line")
     parser_train.add_argument("-m", "--model", type=str, required=True, help="the prefix to save models and parameters")
+    parser_train.add_argument("-p", "--params", type=str, default=None, help="specifies the best parameters file instead of searching for it, skips the optimization step")
+    parser_train.add_argument("-c", "--config", type=str, default=None,
+    help="modifies the default configuration space to use the given starting values for searching; in json format,"
+         "e.g., set `--space '{\"dim\": [3, 10]}'` to start searching word embeddings of dimension 3 and 10")
     parser_train.add_argument("-b", "--bsize", type=int, default=16, help="beam size for hyper-parameter optimization")
     parser_train.add_argument("-e", "--esize", type=int, default=4, help="explore this number of best configurations' neighbors")
     parser_train.add_argument("-k", "--kfolds", type=int, default=3, help="k for the k-fold cross-validation")
@@ -218,16 +236,18 @@ if __name__ == '__main__':
     parser_norm.add_argument("--raw", default=False, action='store_true', help="raw text is used as input instead of json")
 
     args = parser.parse_args()
-
-    if args.command == "train":
-        train_main(args)
-    elif args.command == "predict":
-        predict_main(args)
-    elif args.command == "sentence-vectors":
-        sentence_vectors_main(args)
-    elif args.command == "normalize":
-        normalize_main(args)
+    if hasattr(args, "command"):
+        if args.command == "train":
+            train_main(args)
+        elif args.command == "predict":
+            predict_main(args)
+        elif args.command == "sentence-vectors":
+            sentence_vectors_main(args)
+        elif args.command == "normalize":
+            normalize_main(args)
+        else:
+            parser.print_help()
+            sys.exit(-1)
     else:
         parser.print_help()
-        # args.print_help()
         sys.exit(-1)

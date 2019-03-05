@@ -467,7 +467,7 @@ def run_kfold(data):
     return score / kfolds.get_n_splits(), config
 
 
-def search_params(X, y, pool, bsize=32, esize=4, n_splits=3, tol=0.001, text_key='text'):
+def search_params(X, y, pool, bsize=32, esize=4, n_splits=3, tol=0.001, text_key='text', space=ConfigSpace()):
     """
     Searches for the best fastText configuration on `X` and `y` using beam-search meta-heuristic
 
@@ -490,8 +490,11 @@ def search_params(X, y, pool, bsize=32, esize=4, n_splits=3, tol=0.001, text_key
        minimum improvement tolerance for the optimization process
     text_key: str
        the key used to access textual data in each item of `X`
+    space: ConfigSpace
+       specifies the search space of configurations
     """
-    space = ConfigSpace()
+    if space is None:
+        space = ConfigSpace()
     tabu = set()
     data_list = []
     kfolds = StratifiedKFold(n_splits)
