@@ -127,18 +127,36 @@ def normalize_main(args):
             if len(line) == 0:
                 break
     
+            klass = []
             if args.raw:
-                d = {args.text: line}
+                if args.parse_labels is not None:  
+                    arr = line.split()
+                    while arr[0].startswith('__label__'):
+                        klass.append(arr.pop(0))
+
+                    d = {args.text: " ".join(arr)}
+                else:
+                    d = {args.text: line}
             else:
                 d = json.loads(line)
+                if args.parse_labels:
+                    klass = d[args.klass]
+                    if isinstance(klass, (int, str)):
+                        klass = ["__label__{0}".format(klass)]
+                    else:
+                        klass = ["__label__{0}".format(k) for k in klass]
             
             data = ft.normalize_one(d)
-            print(data, file=outfile)
 
-    if args.test == '-':
+            if len(klass) > 0:
+                print(" ".join(klass) + ' ' + data, file=outfile)
+            else:
+                print(data, file=outfile)
+
+    if args.dataset == '-':
         infile = sys.stdin
     else:
-        infile = open(args.test)
+        infile = open(args.dataset)
     if args.output == '-':
         outfile = sys.stdout
     else:
@@ -228,11 +246,13 @@ if __name__ == '__main__':
     parser_vectors.add_argument("-o", "--output", default='-', help="filename to save output")
     parser_vectors.add_argument("--raw", default=False, action='store_true', help="raw text is used as input instead of json")
     parser_norm = subparsers.add_parser(
-        'normalize', help='extracts text from a collection and normalizes it'
+        'normalize', help='extracts text from a dataset and normalizes it'
     )
     parser_norm.add_argument("--command", default="normalize", help=SUPPRESS)
-    parser_norm.add_argument("collection", help="input file; each line is a json per line")
+    parser_norm.add_argument("dataset", help="input file; each line is a json per line")
     parser_norm.add_argument("-p", "--params", default=None, help="params; created with train or by hand; if not given default parameters will be used")
+    parser_norm.add_argument("--no-labels", dest="parse_labels", default=True, action='store_false', help="discard parsing labels (only activated with --raw)")
+    parser_norm.add_argument("-o", "--output", default='-', help="filename to save output")
     parser_norm.add_argument("--raw", default=False, action='store_true', help="raw text is used as input instead of json")
 
     args = parser.parse_args()

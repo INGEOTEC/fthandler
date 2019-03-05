@@ -228,8 +228,16 @@ class FastTextHandler(object):
         
         if label is None:
             return text
+        
+        s = []
+        if isinstance(label, (tuple, list)):
+            for l in label:
+                s.append("__label__" + l)
         else:
-            return "__label__{0} {1}".format(label, text)
+            s.append("__label__" + label)
+        
+        s.append(text)
+        return " ".join(s)
     
     def normalize_array(self, X, y=None):
         """
