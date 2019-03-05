@@ -1,3 +1,10 @@
+*.tmp
+*.bak
+*.bin
+*.pickle
+*.vec
+*.params
+.*
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

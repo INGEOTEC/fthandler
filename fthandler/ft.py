@@ -121,7 +121,7 @@ def config_id(c):
     return "_".join(["{0}={1}".format(k, v) for k, v in h if k[0] != '_'])
 
 
-fastTextPath = "./fasttext"
+fastTextPath = "./fastText/fasttext"
 
 if not os.path.exists(fastTextPath):
     raise Exception("Not found a valid fasttext binary in the current directory")
