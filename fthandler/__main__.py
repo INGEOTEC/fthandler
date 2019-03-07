@@ -36,12 +36,12 @@ def train_main(args):
                                 bsize=args.bsize, esize=args.esize, n_splits=args.kfolds, tol=args.tol,
                                 text_key=args.text)
     else:
-        with open(pool.params) as f:
+        with open(args.params) as f:
             best_list = json.load(f)
 
     space = ConfigSpace()
-    if args.space is not None:
-        s = json.loads(args.space)
+    if args.config is not None:
+        s = json.loads(args.config)
         for k, v in s.items():
             if isinstance(v, (list, tuple)):
                 setattr(space, k, v)

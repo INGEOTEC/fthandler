@@ -232,9 +232,9 @@ class FastTextHandler(object):
         s = []
         if isinstance(label, (tuple, list)):
             for l in label:
-                s.append("__label__" + l)
+                s.append("__label__{}".format(l))
         else:
-            s.append("__label__" + label)
+            s.append("__label__{}".format(label))
         
         s.append(text)
         return " ".join(s)
@@ -503,9 +503,10 @@ def search_params(X, y, pool, bsize=32, esize=4, n_splits=3, tol=0.001, text_key
     """
     if space is None:
         space = ConfigSpace()
+    
     tabu = set()
     data_list = []
-    kfolds = StratifiedKFold(n_splits)
+    kfolds = StratifiedKFold(n_splits, shuffle=True)
 
     for i in range(bsize):
         c = space.random_config()
