@@ -73,7 +73,7 @@ def predict_main(args):
     name = args.model.replace(".pickle", "")
     with open(name + ".pickle", "rb") as f:
         ft, le = pickle.load(f)
-        ft.model = name
+        ft._modelname = name
         ft.text_key = args.text
     
     def read_print_loop(infile, outfile):
@@ -173,7 +173,7 @@ def sentence_vectors_main(args):
     name = args.model.replace(".pickle", "")
     with open(name + ".pickle", "rb") as f:
         ft, le = pickle.load(f)
-        ft.model = name
+        ft._modelname = name
         ft.text_key = args.text
 
     def read_print_loop(infile, outfile):

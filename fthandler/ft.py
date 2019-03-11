@@ -386,8 +386,9 @@ class FastTextHandler(object):
         Creates a function to compute sentence vectors (use "with" syntax).
         
         """
-        proc = subprocess.Popen([fastTextPath, "print-sentence-vectors", self._modelname + ".bin"],
-                                stdin=subprocess.PIPE, encoding='utf8', stdout=subprocess.PIPE)
+        cmd = [fastTextPath, "print-sentence-vectors", self._modelname + ".bin"]
+        print(cmd, file=sys.stderr)
+        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, encoding='utf8', stdout=subprocess.PIPE)
 
         def fun(x):
             data = self.normalize_one(x)
