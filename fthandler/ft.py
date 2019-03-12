@@ -387,7 +387,7 @@ class FastTextHandler(object):
         
         """
         cmd = [fastTextPath, "print-sentence-vectors", self._modelname + ".bin"]
-        print(cmd, file=sys.stderr)
+        # print(cmd, file=sys.stderr)
         proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, encoding='utf8', stdout=subprocess.PIPE)
 
         def fun(x):
