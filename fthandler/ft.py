@@ -31,11 +31,15 @@ class ConfigSpace(object):
         self.wn = [1, 2, 3]
         self.minn = [0, 1, 2, 3]
         self.maxn = [3, 5, 7]
+        self._fixed = []
 
     def param_neighbors(self, field, value):
         """
         Defines perturbations for each parameter
         """
+        if field in self._fixed:
+            return None
+
         if field.startswith('mask'):
             return [not value]
 
@@ -97,8 +101,9 @@ class ConfigSpace(object):
 
             c = config.copy()
             for s in self.param_neighbors(field, config[field]):
-                c[field] = s
-                yield c
+                if s is not None:
+                    c[field] = s
+                    yield c
 
 
 def config_id(c):
@@ -430,6 +435,7 @@ def run_one(config, X, y, Xtest, ytest, text_key):
     -------
     The score (currently macro-recall)
     """
+    ft = None
     try:
         ft = FastTextHandler(text_key=text_key, **config).fit(X, y)
         hy = ft.predict(Xtest)
@@ -437,7 +443,8 @@ def run_one(config, X, y, Xtest, ytest, text_key):
         # score = (np.array(ytest) == np.array(hy)).mean()
         # score = f1_score(le.transform(ydev), le.transform(hy), average='binary')
     finally:
-        ft.delete_model_file()
+        if ft is not None:
+            ft.delete_model_file()
         
     return score
 
