@@ -1,3 +1,5 @@
+performance.*
+predicted.*
 *.tmp
 *.bak
 *.bin

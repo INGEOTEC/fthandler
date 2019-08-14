@@ -29,24 +29,24 @@ def train_main(args):
     y = [x[args.klass] for x in X]
     le = LabelEncoder().fit(y)
     y = le.transform(y)
-    
+
     if args.params is None:
+        space = ConfigSpace()
+        if args.config is not None:
+            s = json.loads(args.config)
+            for k, v in s.items():
+                if isinstance(v, (list, tuple)):
+                    setattr(space, k, v)
+                else:
+                    setattr(space, k, [v])
+
         pool = Pool(args.nprocs)
         best_list = search_params(np.array(X), np.array(y), pool,
-                                bsize=args.bsize, esize=args.esize, n_splits=args.kfolds, tol=args.tol,
-                                text_key=args.text)
+                                  bsize=args.bsize, esize=args.esize, n_splits=args.kfolds, tol=args.tol,
+                                  text_key=args.text, space=space)
     else:
         with open(args.params) as f:
             best_list = json.load(f)
-
-    space = ConfigSpace()
-    if args.config is not None:
-        s = json.loads(args.config)
-        for k, v in s.items():
-            if isinstance(v, (list, tuple)):
-                setattr(space, k, v)
-            else:
-                setattr(space, k, [v])
 
     print('saving best list', file=sys.stderr)
     with open(args.model + '.params', 'w') as f:
@@ -221,7 +221,7 @@ if __name__ == '__main__':
     parser_train.add_argument("-p", "--params", type=str, default=None, help="specifies the best parameters file instead of searching for it, skips the optimization step")
     parser_train.add_argument("-c", "--config", type=str, default=None,
     help="modifies the default configuration space to use the given starting values for searching; in json format,"
-         "e.g., set `--space '{\"dim\": [3, 10]}'` to start searching word embeddings of dimension 3 and 10")
+         "e.g., set `--config '{\"dim\": [3, 10]}'` to start searching word embeddings of dimension 3 and 10")
     parser_train.add_argument("-b", "--bsize", type=int, default=16, help="beam size for hyper-parameter optimization")
     parser_train.add_argument("-e", "--esize", type=int, default=4, help="explore this number of best configurations' neighbors")
     parser_train.add_argument("-k", "--kfolds", type=int, default=3, help="k for the k-fold cross-validation")
