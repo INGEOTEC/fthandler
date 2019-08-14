@@ -48,6 +48,9 @@ def normalize_words(text, mask_users=True, mask_hashtags=True, mask_nums=True):
 def normalize(text, del_diac=True, del_punc=False, emoticons_to_emojis=True, mask_urls=True, mask_users=True, mask_hashtags=True, mask_nums=True, mask_rep=True):
     L = []
 
+    if isinstance(text, (tuple, list)):
+        text = ". ".join(text)
+
     text = text.lower().replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>').replace('\n', ' ')
 
     if emoticons_to_emojis:

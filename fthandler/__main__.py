@@ -90,7 +90,7 @@ def predict_main(args):
 
                 hy = predict_prob(d)
                 d[args.klass + '_prob'] = hy
-                d[args.klass] = le.inverse_transform([np.argmax(hy)])[0]
+                d[args.klass] = int(le.inverse_transform([np.argmax(hy)])[0])
                 print(json.dumps(d, sort_keys=True), file=outfile)
 
     if args.test == '-':
